@@ -1,9 +1,7 @@
 name: Update manifest
 
-# Follows the latest release of the app: new version, new links, new checksums. Runs every day, or by hand.
+# Follows the latest release of the app: new version, new links, new checksums. Run by hand until the Actions app may push to main (see the ruleset), then add a daily schedule back.
 on:
-  schedule:
-    - cron: "41 5 * * *"
   workflow_dispatch:
 
 permissions:
