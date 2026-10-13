@@ -1,0 +1,41 @@
+name: Update manifest
+
+# Follows the latest release of the app: new version, new links, new checksums. Runs every day, or by hand.
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Update to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo Vallaury/vallaury-desktop --json tagName -q .tagName)
+          v=${tag#v}
+          file=bucket/vallaury.json
+          if [ "$v" = "$(jq -r .version "$file")" ]; then echo "Already at $v"; exit 0; fi
+          base="https://github.com/Vallaury/vallaury-desktop/releases/download/$tag"
+          curl -fsSL "$base/SHA256SUMS" -o sums
+          hash() { awk -v f="$1" '$2 == f { print $1 }' sums | head -n 1; }
+          x64=$(hash "Vallaury-$v-win-x64.exe"); arm=$(hash "Vallaury-$v-win-arm64.exe"); ia32=$(hash "Vallaury-$v-win-ia32.exe")
+          test -n "$x64" && test -n "$arm" && test -n "$ia32"
+          jq --indent 4 --arg v "$v" --arg base "$base" --arg x64 "$x64" --arg arm "$arm" --arg ia32 "$ia32" '
+            .version = $v
+            | .architecture["64bit"] = { url: "\($base)/Vallaury-\($v)-win-x64.exe", hash: $x64 }
+            | .architecture.arm64 = { url: "\($base)/Vallaury-\($v)-win-arm64.exe", hash: $arm }
+            | .architecture["32bit"] = { url: "\($base)/Vallaury-\($v)-win-ia32.exe", hash: $ia32 }
+          ' "$file" > new.json
+          mv new.json "$file"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Vallaury $v"
+          git push
